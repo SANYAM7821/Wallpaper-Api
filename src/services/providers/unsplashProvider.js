@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { httpClient } = require('../../utils/httpClient');
 
 /**
  * Fetch wallpapers from Unsplash public search API
@@ -28,7 +28,7 @@ async function fetchUnsplashWallpapers(query, options = {}) {
       url = `https://unsplash.com/napi/search/photos?query=${encodeURIComponent(query)}&per_page=${perPage}`;
     }
 
-    const response = await axios.get(url, { headers, timeout: 10000 });
+    const response = await httpClient.get(url, { headers, timeout: 2500 });
 
     if (!response.data || !Array.isArray(response.data.results)) {
       return [];

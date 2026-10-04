@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { httpClient } = require('../../utils/httpClient');
 
 /**
  * Fetch wallpapers from Wallhaven API
@@ -20,23 +20,23 @@ async function fetchWallhavenWallpapers(query, options = {}) {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     };
 
-    let response = await axios.get(url, { headers, timeout: 10000 });
+    let response = await httpClient.get(url, { headers, timeout: 2500 });
     let data = response.data?.data || [];
 
     // Fallback to raw query if cleaned query yields 0 results
     if (data.length === 0 && cleanQuery !== query) {
       url = `https://wallhaven.cc/api/v1/search?q=${encodeURIComponent(query)}&sorting=relevance`;
-      response = await axios.get(url, { headers, timeout: 10000 });
+      response = await httpClient.get(url, { headers, timeout: 2500 });
       data = response.data?.data || [];
     }
 
-    // If limit > 24 (default is 30) and page 1 was full, fetch page 2 to ensure 30+ items
+    // If limit > 24 (default is 30) and page 1 was full, fetch page 2
     const targetLimit = options.limit || 30;
     if (data.length >= 24 && targetLimit > 24) {
       try {
         const activeQuery = (data.length > 0 && cleanQuery !== query && response.config?.url?.includes(encodeURIComponent(cleanQuery))) ? cleanQuery : query;
         const page2Url = `https://wallhaven.cc/api/v1/search?q=${encodeURIComponent(activeQuery)}&sorting=relevance&page=2`;
-        const page2Res = await axios.get(page2Url, { headers, timeout: 10000 });
+        const page2Res = await httpClient.get(page2Url, { headers, timeout: 2500 });
         const page2Data = page2Res.data?.data || [];
         data = [...data, ...page2Data];
       } catch (err) {

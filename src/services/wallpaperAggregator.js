@@ -1,6 +1,7 @@
 const { fetchWallhavenWallpapers } = require('./providers/wallhavenProvider');
 const { fetchUnsplashWallpapers } = require('./providers/unsplashProvider');
 const { fetchDuckDuckGoWallpapers } = require('./providers/duckduckgoProvider');
+const { wallpaperCache } = require('../utils/cache');
 
 /**
  * Clean/normalize URL for duplication checks
@@ -64,7 +65,7 @@ function interleaveAndDeduplicate(providerResults, limit = 30) {
 }
 
 /**
- * Aggregate wallpapers from all providers for a given query
+ * Aggregate wallpapers from all providers for a given query with caching
  * @param {string} query - Search query
  * @param {object} options - Options such as limit (default 30)
  * @returns {Promise<Array>} List of normalized wallpaper objects
@@ -76,22 +77,42 @@ async function aggregateWallpapers(query, options = {}) {
     return [];
   }
 
+  const normQuery = query.trim().toLowerCase();
+
+  // 1. In-Memory TTL Cache Hit Check (< 10ms response)
+  const cached = wallpaperCache.get(normQuery);
+  if (cached) {
+    return cached.slice(0, limit);
+  }
+
+  // Fetch slightly larger set (up to 60 or limit) so cache can serve varying limit demands
+  const fetchLimit = Math.max(limit, 60);
+  const providerOptions = { ...options, limit: fetchLimit };
+
+  // 2. Parallel fetch with aggressive 2.5s timeouts via Promise.allSettled
   const results = await Promise.allSettled([
-    fetchWallhavenWallpapers(query, options),
-    fetchUnsplashWallpapers(query, options),
-    fetchDuckDuckGoWallpapers(query, options)
+    fetchWallhavenWallpapers(query, providerOptions),
+    fetchUnsplashWallpapers(query, providerOptions),
+    fetchDuckDuckGoWallpapers(query, providerOptions)
   ]);
 
   const providerData = results.map((res, idx) => {
     if (res.status === 'fulfilled') {
       return res.value;
     } else {
-      console.warn(`Provider index ${idx} rejected:`, res.reason);
+      console.warn(`Provider index ${idx} rejected or timed out:`, res.reason);
       return [];
     }
   });
 
-  return interleaveAndDeduplicate(providerData, limit);
+  const combinedResults = interleaveAndDeduplicate(providerData, fetchLimit);
+
+  // 3. Save to TTL Cache if results found
+  if (combinedResults.length > 0) {
+    wallpaperCache.set(normQuery, combinedResults);
+  }
+
+  return combinedResults.slice(0, limit);
 }
 
 module.exports = {

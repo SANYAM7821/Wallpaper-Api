@@ -1,26 +1,31 @@
-const axios = require('axios');
+const { httpClient } = require('../../utils/httpClient');
 
 /**
- * Helper to fetch vqd token from DuckDuckGo
+ * Helper to fetch vqd token from DuckDuckGo with lightweight headers & fast timeout
  */
 async function getVqdToken(query) {
-  const url = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&ia=images&iax=images`;
-  const response = await axios.get(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-    },
-    timeout: 10000
-  });
+  try {
+    const url = `https://duckduckgo.com/?q=${encodeURIComponent(query)}&ia=images&iax=images`;
+    const response = await httpClient.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      },
+      timeout: 2000
+    });
 
-  const html = response.data;
-  if (typeof html !== 'string') return null;
+    const html = response.data;
+    if (typeof html !== 'string') return null;
 
-  const vqdMatch = html.match(/vqd=['"]?([\d-]+)['"]?/i) ||
-                   html.match(/vqd=([\d-]+)/i) ||
-                   html.match(/vqd=['"]?([^'"&\s]+)['"]?/i);
+    const vqdMatch = html.match(/vqd=['"]?([\d-]+)['"]?/i) ||
+                     html.match(/vqd=([\d-]+)/i) ||
+                     html.match(/vqd=['"]?([^'"&\s]+)['"]?/i);
 
-  return vqdMatch ? vqdMatch[1] : null;
+    return vqdMatch ? vqdMatch[1] : null;
+  } catch (error) {
+    console.warn('DuckDuckGo provider: vqd token fetch failed or timed out:', error.message);
+    return null;
+  }
 }
 
 /**
@@ -37,21 +42,17 @@ async function fetchDuckDuckGoWallpapers(query, options = {}) {
 
     const vqd = await getVqdToken(query);
     if (!vqd) {
-      console.warn('DuckDuckGo provider: Could not extract vqd token');
       return [];
     }
 
     const apiUrl = `https://duckduckgo.com/i.js?q=${encodeURIComponent(query)}&o=json&vqd=${vqd}`;
-    const response = await axios.get(apiUrl, {
+    const response = await httpClient.get(apiUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Referer': 'https://duckduckgo.com/',
-        'Accept': 'application/json, text/javascript, */*; q=0.01',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin'
+        'Accept': 'application/json, text/javascript, */*; q=0.01'
       },
-      timeout: 10000
+      timeout: 2500
     });
 
     if (!response.data || !Array.isArray(response.data.results)) {
@@ -68,7 +69,7 @@ async function fetchDuckDuckGoWallpapers(query, options = {}) {
       source: 'duckduckgo'
     })).filter(img => img.url);
   } catch (error) {
-    console.error('DuckDuckGo provider error:', error.message);
+    console.warn('DuckDuckGo provider error:', error.message);
     return [];
   }
 }
